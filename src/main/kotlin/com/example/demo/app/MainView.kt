@@ -1,6 +1,5 @@
-package com.example.demo.view
+package com.example.demo.app
 
-import com.example.demo.app.Cell
 import javafx.scene.paint.Color
 import tornadofx.*
 import java.lang.Thread.sleep

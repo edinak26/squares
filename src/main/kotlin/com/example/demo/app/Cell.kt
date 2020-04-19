@@ -1,7 +1,5 @@
 package com.example.demo.app
 
-import com.example.demo.view.COLUMN_NUMBER
-import com.example.demo.view.LINES_NUMBER
 import javafx.scene.paint.Color
 import kotlin.random.Random
 
