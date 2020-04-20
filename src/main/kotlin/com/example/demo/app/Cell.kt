@@ -1,43 +1,116 @@
 package com.example.demo.app
 
+import com.example.demo.app.Direction.Companion.generateRandomDirection
 import javafx.scene.paint.Color
+import kotlin.math.abs
 import kotlin.random.Random
 
 enum class Direction {
-    TOP, RIGHT, BOTTOM, LEFT
+    TOP, RIGHT, BOTTOM, LEFT;
+
+    companion object {
+        fun generateRandomDirection() = values().run { get(Random.nextInt(size)) }
+    }
 }
 
-class Cell(
-        var lineNumber: Int,
-        var columnNumber: Int,
-        var color: Color,
-        private val cellsLocations: Array<Array<Cell?>>
+data class Cell(
+        var coordinate: Coordinate,
+        val cellsLocations: Array<Array<Cell?>>
 ) {
-    fun runCycle() =
-            moveTo(Direction.values().run { get(Random.nextInt(size)) })
 
+    var brain = Brain(100)
+    var isAlive = true
+    var energy = 50.0
+    var age = 0
+    var color = generateColorFromBrain()
 
-    private fun moveTo(direction: Direction) = when (direction) {
-        Direction.TOP -> moveTo(lineNumber - 1, columnNumber)
-        Direction.RIGHT -> moveTo(lineNumber, columnNumber + 1)
-        Direction.BOTTOM -> moveTo(lineNumber + 1, columnNumber)
-        Direction.LEFT -> moveTo(lineNumber, columnNumber - 1)
+    fun generateColorFromBrain(): Color {
+        val red = brain.actions.filter { it is Action.Go }.count() / brain.actions.size.toDouble()
+        val green = brain.actions.filter { it is Action.GenerateEnergy }.count() / brain.actions.size.toDouble()
+        val blue = brain.actions.filter { it is Action.SkipActions }.count() / brain.actions.size.toDouble()
+        return Color(red, green, blue, 1.0)
     }
 
-    private fun moveTo(newLine: Int, newColumn: Int) {
-        val roundNewLine = roundCoordinate(newLine, LINES_NUMBER - 1)
-        val roundNewColumn = roundCoordinate(newColumn, COLUMN_NUMBER - 1)
-        if (cellsLocations[roundNewLine][roundNewColumn] != null) return
+    private var children = mutableListOf<Cell>()
 
-        cellsLocations[lineNumber][columnNumber] = null
-        lineNumber = roundNewLine
-        columnNumber = roundNewColumn
-        cellsLocations[lineNumber][columnNumber] = this
+    fun dropChildren(): List<Cell> =
+            children.also { children = mutableListOf() }
+
+    private fun kill() {
+        isAlive = false
     }
 
-    private fun roundCoordinate(coordinate: Int, maxValue: Int): Int {
-        if (coordinate < 0) return 0
-        if (coordinate > maxValue) return maxValue
-        return coordinate
+    fun runCycle() {
+        age++
+        if (age >= 100) isAlive = false
+        if (energy <= 0) isAlive = false
+        if (!isAlive) return
+        runCurrentAction(brain.getCurrentAction())
+    }
+
+    private fun runCurrentAction(action: Action) = when (action) {
+        is Action.GenerateEnergy -> energy += 3//((LINES_NUMBER/2 - abs(LINES_NUMBER/2 - coordinate.line))/LINES_NUMBER.toDouble()*4 + (COLUMN_NUMBER/2 - abs(COLUMN_NUMBER/2 - coordinate.column))/COLUMN_NUMBER.toDouble()*4).toInt()
+        //+(coordinate.line/ LINES_NUMBER.toDouble())
+        is Action.CreateChild -> produceChild()
+        is Action.Go -> moveTo(action.direction)
+        else -> Unit
+    }
+
+    private fun produceChild() {
+        if (energy >= 100) {
+            val childCoordinate = coordinate.coordinateIn(generateRandomDirection())
+            if (cellsLocations[childCoordinate] == null) {
+                energy = 50.0
+                val child = Cell(childCoordinate, cellsLocations)
+                child.brain = Brain(arrayOf(*brain.actions))
+                child.color = child.generateColorFromBrain()
+                child.brain.mutate()
+                children.add(child)
+            }
+
+        }
+    }
+
+    private fun Color.mutate() =
+            Color(red.mutate(), green.mutate(), blue.mutate(), opacity.mutate())
+
+    private fun Double.mutate() =
+            (this + (Random.nextInt(3) - 1) * Random.nextDouble(0.1)).let {
+                if (it <= 0) 0.1 else if (it >= 1.0) 0.9 else it
+            }
+
+    private fun moveTo(direction: Direction) = moveTo(coordinate.coordinateIn(direction))
+
+    private fun moveTo(newCoordinate: Coordinate) {
+        if (coordinate != newCoordinate)
+            cellsLocations[newCoordinate]
+                    ?.let { killCell(it) }
+                    ?: moveToEmptyCell(newCoordinate)
+    }
+
+    private fun killCell(cell: Cell) {
+        //colorEquality(cell.color, color) <= 0.4 &&
+        if ( brain.brainEquality(cell.brain) <= 5) {
+            val commonEnergy = energy + cell.energy
+            energy = commonEnergy / 2
+            cell.energy = commonEnergy / 2
+            return
+        }
+        energy += cell.energy/2
+        cell.kill()
+    }
+
+    private fun colorEquality(c1: Color, c2: Color) =
+            (abs(c1.red - c2.red) +
+                    abs(c1.green - c2.green) +
+                    abs(c1.blue - c2.blue) +
+                    abs(c1.opacity - c2.opacity)) / 4
+
+
+    private fun moveToEmptyCell(newCoordinate: Coordinate) {
+        energy--
+        cellsLocations[coordinate] = null
+        coordinate = newCoordinate
+        cellsLocations[newCoordinate] = this
     }
 }
